@@ -1,0 +1,13 @@
+# Pinned in Step 4. Planned core dependencies:
+# langgraph
+# qdrant-client
+# psycopg2-binary
+# fastapi
+# uvicorn
+# pypdf
+# pdf2image
+# faster-whisper
+# sentence-transformers
+# yfinance
+# streamlit
+# python-dotenv
