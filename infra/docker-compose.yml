@@ -1,3 +1,26 @@
-# Step 3 populates this with Qdrant, Postgres, and Langfuse services.
-version: "3.9"
-services: {}
+
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: copilot-qdrant
+    ports:
+      - "6333:6333"   # REST API + dashboard
+      - "6334:6334"   # gRPC
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  postgres:
+    image: postgres:16
+    container_name: copilot-postgres
+    environment:
+      POSTGRES_USER: copilot
+      POSTGRES_PASSWORD: copilot
+      POSTGRES_DB: copilot
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  qdrant_data:
+  postgres_data:
