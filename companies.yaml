@@ -1,4 +1,62 @@
-# Step 1 — fill in your 15-25 tracked companies
-# - ticker: AAPL
-#   cik: "0000320193"
-#   sector: hardware
+sector: cloud_saas
+
+companies:
+  - ticker: MSFT
+    cik: "0000789019"
+    name: Microsoft
+
+  - ticker: GOOGL
+    cik: "0001652044"
+    name: Alphabet
+
+  - ticker: AMZN
+    cik: "0001018724"
+    name: Amazon
+
+  - ticker: CRM
+    cik: "0001108524"
+    name: Salesforce
+
+  - ticker: SNOW
+    cik: "0001640147"
+    name: Snowflake
+
+  - ticker: DDOG
+    cik: "0001561550"
+    name: Datadog
+
+  - ticker: NET
+    cik: "0001477333"
+    name: Cloudflare
+
+  - ticker: MDB
+    cik: "0001441816"
+    name: MongoDB
+
+  - ticker: ZS
+    cik: "0001713683"
+    name: Zscaler
+
+  - ticker: PLTR
+    cik: "0001321655"
+    name: Palantir
+
+  - ticker: TEAM
+    cik: "0001650372"
+    name: Atlassian
+
+  - ticker: HUBS
+    cik: "0001404655"
+    name: HubSpot
+
+  - ticker: PANW
+    cik: "0001327567"
+    name: Palo Alto Networks
+
+  - ticker: WDAY
+    cik: "0001327811"
+    name: Workday
+
+  - ticker: NOW
+    cik: "0001373715"
+    name: ServiceNow
