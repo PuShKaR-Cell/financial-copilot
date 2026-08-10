@@ -1,0 +1,15 @@
+# Backend
+backend/.env
+backend/.venv/
+backend/__pycache__/
+backend/assistant.db
+backend/*.db-journal
+
+# Mobile
+mobile/node_modules/
+mobile/.expo/
+mobile/.expo-shared/
+mobile/dist/
+mobile/web-build/
+mobile/npm-debug.*
+mobile/yarn-error.log
