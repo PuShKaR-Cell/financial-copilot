@@ -4,9 +4,13 @@
   "main": "index.ts",
   "scripts": {
     "start": "expo start --dev-client",
-    "android": "expo run:android",
-    "ios": "expo run:ios",
-    "prebuild": "expo prebuild"
+    "prebuild": "expo prebuild",
+    "eas:login": "eas login",
+    "eas:init": "eas init",
+    "eas:build:android": "eas build --profile preview --platform android",
+    "eas:build:ios": "eas build --profile preview --platform ios",
+    "eas:build:dev:android": "eas build --profile development --platform android",
+    "eas:build:dev:ios": "eas build --profile development --platform ios"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "1.23.1",
@@ -19,6 +23,7 @@
     "expo-notifications": "~0.28.0",
     "expo-sqlite": "~14.0.0",
     "expo-status-bar": "~1.12.0",
+    "expo-updates": "~0.25.0",
     "llama.rn": "^0.3.9",
     "react": "18.2.0",
     "react-native": "0.74.0",
@@ -28,6 +33,7 @@
   "devDependencies": {
     "@babel/core": "^7.24.0",
     "@types/react": "~18.2.0",
+    "eas-cli": "^12.0.0",
     "typescript": "~5.3.0"
   },
   "private": true

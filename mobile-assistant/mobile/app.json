@@ -5,6 +5,9 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.example.mobileassistant",
@@ -34,7 +37,13 @@
       ]
     ],
     "extra": {
-      "defaultSearxngUrl": "http://192.168.1.42:8888"
+      "defaultSearxngUrl": "http://192.168.1.42:8888",
+      "eas": {
+        "projectId": "REPLACE_WITH_YOUR_PROJECT_ID"
+      }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/REPLACE_WITH_YOUR_PROJECT_ID"
     }
   }
 }
