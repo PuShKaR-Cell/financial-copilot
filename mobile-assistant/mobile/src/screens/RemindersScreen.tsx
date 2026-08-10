@@ -11,26 +11,21 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { completeReminder, listReminders, type Reminder } from "../api";
+import { completeReminder, listReminders, type Reminder } from "../db";
 import { syncReminders } from "../notifications";
 
 export default function RemindersScreen() {
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [includeDone, setIncludeDone] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setRefreshing(true);
-    setError(null);
     try {
       const data = await listReminders(includeDone);
       setReminders(data);
-      // Keep on-device notifications in sync with the server as source of truth.
       const active = includeDone ? await listReminders(false) : data;
       await syncReminders(active);
-    } catch (err) {
-      setError((err as Error).message);
     } finally {
       setRefreshing(false);
     }
@@ -40,22 +35,21 @@ export default function RemindersScreen() {
     load();
   }, [load]);
 
-  const done = useCallback((r: Reminder) => {
-    Alert.alert("Mark done?", r.text, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Done",
-        onPress: async () => {
-          try {
+  const done = useCallback(
+    (r: Reminder) => {
+      Alert.alert("Mark done?", r.text, [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Done",
+          onPress: async () => {
             await completeReminder(r.id);
             await load();
-          } catch (err) {
-            Alert.alert("Failed", (err as Error).message);
-          }
+          },
         },
-      },
-    ]);
-  }, [load]);
+      ]);
+    },
+    [load],
+  );
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
@@ -66,7 +60,6 @@ export default function RemindersScreen() {
           <Switch value={includeDone} onValueChange={setIncludeDone} />
         </View>
       </View>
-      {error && <Text style={styles.error}>{error}</Text>}
       <FlatList
         data={reminders}
         keyExtractor={(r) => String(r.id)}
@@ -77,18 +70,10 @@ export default function RemindersScreen() {
           const past = when.getTime() < Date.now();
           return (
             <Pressable
-              style={[
-                styles.item,
-                item.done && styles.itemDone,
-              ]}
+              style={[styles.item, item.done && styles.itemDone]}
               onPress={() => !item.done && done(item)}
             >
-              <Text
-                style={[
-                  styles.itemText,
-                  item.done && styles.itemTextDone,
-                ]}
-              >
+              <Text style={[styles.itemText, item.done && styles.itemTextDone]}>
                 {item.text}
               </Text>
               <Text style={[styles.date, past && !item.done && styles.datePast]}>
@@ -99,9 +84,7 @@ export default function RemindersScreen() {
         }}
         ListEmptyComponent={
           !refreshing ? (
-            <Text style={styles.empty}>
-              No reminders. Ask the assistant to set one.
-            </Text>
+            <Text style={styles.empty}>No reminders. Ask the assistant to set one.</Text>
           ) : null
         }
       />
@@ -140,10 +123,5 @@ const styles = StyleSheet.create({
     color: "#6b7280",
     marginTop: 40,
     paddingHorizontal: 24,
-  },
-  error: {
-    color: "#b91c1c",
-    textAlign: "center",
-    marginTop: 8,
   },
 });

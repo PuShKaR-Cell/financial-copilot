@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -12,23 +12,39 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { chat, listReminders, resetChat } from "../api";
+import { appendChat, listReminders, loadChat, resetChat, type ChatMessage } from "../db";
+import { runAgentTurn, type AgentEvent } from "../agent";
+import { getTimezone } from "../config";
 import { syncReminders } from "../notifications";
 
-type Message = {
+type DisplayMsg = {
   id: string;
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "trace";
   text: string;
 };
 
-const timezone =
-  Intl?.DateTimeFormat?.().resolvedOptions().timeZone ?? "UTC";
-
 export default function ChatScreen() {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<DisplayMsg[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const listRef = useRef<FlatList<Message>>(null);
+  const [tzState, setTzState] = useState("UTC");
+  const listRef = useRef<FlatList<DisplayMsg>>(null);
+
+  useEffect(() => {
+    (async () => {
+      setTzState(await getTimezone());
+      const history = await loadChat();
+      setMessages(
+        history
+          .filter((m) => m.role === "user" || m.role === "assistant")
+          .map((m) => ({
+            id: `db-${m.id}`,
+            role: m.role as "user" | "assistant",
+            text: m.content,
+          })),
+      );
+    })();
+  }, []);
 
   const scrollToEnd = useCallback(() => {
     setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 50);
@@ -39,7 +55,8 @@ export default function ChatScreen() {
     if (!text || sending) return;
     setInput("");
     setSending(true);
-    const userMsg: Message = {
+
+    const userMsg: DisplayMsg = {
       id: `u-${Date.now()}`,
       role: "user",
       text,
@@ -48,21 +65,47 @@ export default function ChatScreen() {
     scrollToEnd();
 
     try {
-      const { reply } = await chat(text, timezone);
-      const assistantMsg: Message = {
-        id: `a-${Date.now()}`,
-        role: "assistant",
-        text: reply,
+      await appendChat("user", text);
+
+      // Load db history for the model (user+assistant only — the agent injects
+      // its own scratch turns for tools).
+      const history: ChatMessage[] = (await loadChat()).filter(
+        (m) => m.role === "user" || m.role === "assistant",
+      );
+
+      const onEvent = (e: AgentEvent) => {
+        if (e.type === "tool_call") {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `t-${Date.now()}-${Math.random()}`,
+              role: "trace",
+              text: `→ ${e.name}(${JSON.stringify(e.args)})`,
+            },
+          ]);
+          scrollToEnd();
+        }
       };
-      setMessages((prev) => [...prev, assistantMsg]);
+
+      const { assistantText } = await runAgentTurn(history, text, tzState, onEvent);
+
+      await appendChat("assistant", assistantText);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `a-${Date.now()}`,
+          role: "assistant",
+          text: assistantText,
+        },
+      ]);
       scrollToEnd();
 
-      // The assistant may have created reminders; refresh local notifications.
+      // Reminders may have changed; refresh on-device notifications.
       try {
-        const reminders = await listReminders();
+        const reminders = await listReminders(false);
         await syncReminders(reminders);
       } catch {
-        /* silent — notifications will resync next open */
+        /* silent */
       }
     } catch (err) {
       setMessages((prev) => [
@@ -77,15 +120,11 @@ export default function ChatScreen() {
     } finally {
       setSending(false);
     }
-  }, [input, sending, scrollToEnd]);
+  }, [input, sending, scrollToEnd, tzState]);
 
   const clear = useCallback(async () => {
-    try {
-      await resetChat();
-      setMessages([]);
-    } catch (err) {
-      /* leave UI untouched on failure */
-    }
+    await resetChat();
+    setMessages([]);
   }, []);
 
   return (
@@ -107,27 +146,32 @@ export default function ChatScreen() {
           data={messages}
           keyExtractor={(m) => m.id}
           contentContainerStyle={styles.listContent}
-          renderItem={({ item }) => (
-            <View
-              style={[
-                styles.bubble,
-                item.role === "user" ? styles.userBubble : styles.assistantBubble,
-              ]}
-            >
-              <Text
-                style={
-                  item.role === "user" ? styles.userText : styles.assistantText
-                }
+          renderItem={({ item }) => {
+            if (item.role === "trace") {
+              return (
+                <Text style={styles.trace}>{item.text}</Text>
+              );
+            }
+            return (
+              <View
+                style={[
+                  styles.bubble,
+                  item.role === "user" ? styles.userBubble : styles.assistantBubble,
+                ]}
               >
-                {item.text}
-              </Text>
-            </View>
-          )}
+                <Text
+                  style={item.role === "user" ? styles.userText : styles.assistantText}
+                >
+                  {item.text}
+                </Text>
+              </View>
+            );
+          }}
           ListEmptyComponent={
             <View style={styles.empty}>
               <Text style={styles.emptyTitle}>Hi 👋</Text>
               <Text style={styles.emptyBody}>
-                Ask me anything, or tell me to remember something or set a reminder.
+                Ask me anything. I can remember things, set reminders, and search.
               </Text>
             </View>
           }
@@ -136,7 +180,7 @@ export default function ChatScreen() {
         {sending && (
           <View style={styles.thinking}>
             <ActivityIndicator size="small" />
-            <Text style={styles.thinkingText}>Thinking…</Text>
+            <Text style={styles.thinkingText}>Thinking on-device…</Text>
           </View>
         )}
 
@@ -146,7 +190,6 @@ export default function ChatScreen() {
             placeholder="Message"
             value={input}
             onChangeText={setInput}
-            onSubmitEditing={send}
             editable={!sending}
             multiline
           />
@@ -194,6 +237,12 @@ const styles = StyleSheet.create({
   },
   userText: { color: "#fff", fontSize: 16 },
   assistantText: { color: "#111827", fontSize: 16 },
+  trace: {
+    color: "#6b7280",
+    fontSize: 12,
+    fontFamily: Platform.select({ ios: "Menlo", android: "monospace", default: "monospace" }),
+    marginHorizontal: 8,
+  },
   empty: {
     padding: 24,
     alignItems: "center",

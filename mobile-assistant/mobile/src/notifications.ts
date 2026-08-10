@@ -1,7 +1,7 @@
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 
-import type { Reminder } from "./api";
+import type { Reminder } from "./db";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -15,15 +15,20 @@ Notifications.setNotificationHandler({
 
 export async function ensurePermissions(): Promise<boolean> {
   const existing = await Notifications.getPermissionsAsync();
-  if (existing.status === "granted") return true;
-  const req = await Notifications.requestPermissionsAsync();
-  if (Platform.OS === "android") {
-    await Notifications.setNotificationChannelAsync("reminders", {
-      name: "Reminders",
-      importance: Notifications.AndroidImportance.HIGH,
-    });
+  if (existing.status === "granted") {
+    if (Platform.OS === "android") await ensureAndroidChannel();
+    return true;
   }
+  const req = await Notifications.requestPermissionsAsync();
+  if (Platform.OS === "android") await ensureAndroidChannel();
   return req.status === "granted";
+}
+
+async function ensureAndroidChannel(): Promise<void> {
+  await Notifications.setNotificationChannelAsync("reminders", {
+    name: "Reminders",
+    importance: Notifications.AndroidImportance.HIGH,
+  });
 }
 
 const SCHEDULED_TAG = "reminder:";
@@ -39,8 +44,7 @@ export async function syncReminders(reminders: Reminder[]): Promise<void> {
   const now = Date.now();
   for (const r of reminders) {
     if (r.done) continue;
-    const remindAt = new Date(r.remind_at).getTime();
-    if (Number.isNaN(remindAt) || remindAt <= now) continue;
+    if (r.remind_at <= now) continue;
     await Notifications.scheduleNotificationAsync({
       identifier: `${SCHEDULED_TAG}${r.id}`,
       content: {
@@ -49,7 +53,7 @@ export async function syncReminders(reminders: Reminder[]): Promise<void> {
       },
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.DATE,
-        date: remindAt,
+        date: r.remind_at,
       },
     });
   }

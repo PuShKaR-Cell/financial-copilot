@@ -9,17 +9,23 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.example.mobileassistant",
       "infoPlist": {
-        "UIBackgroundModes": ["remote-notification"]
+        "UIBackgroundModes": ["remote-notification"],
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        }
       }
     },
     "android": {
       "package": "com.example.mobileassistant",
-      "permissions": ["SCHEDULE_EXACT_ALARM", "POST_NOTIFICATIONS"]
-    },
-    "web": {
-      "bundler": "metro"
+      "permissions": [
+        "SCHEDULE_EXACT_ALARM",
+        "POST_NOTIFICATIONS",
+        "INTERNET"
+      ],
+      "usesCleartextTraffic": true
     },
     "plugins": [
+      "expo-dev-client",
       [
         "expo-notifications",
         {
@@ -28,7 +34,7 @@
       ]
     ],
     "extra": {
-      "apiUrl": "http://localhost:8000"
+      "defaultSearxngUrl": "http://192.168.1.42:8888"
     }
   }
 }

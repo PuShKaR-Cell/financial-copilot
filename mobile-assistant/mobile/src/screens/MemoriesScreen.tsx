@@ -11,22 +11,17 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { deleteMemory, listMemories, type Memory } from "../api";
+import { deleteMemory, listMemories, type Memory } from "../db";
 
 export default function MemoriesScreen() {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [query, setQuery] = useState("");
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setRefreshing(true);
-    setError(null);
     try {
-      const data = await listMemories(query);
-      setMemories(data);
-    } catch (err) {
-      setError((err as Error).message);
+      setMemories(await listMemories(query));
     } finally {
       setRefreshing(false);
     }
@@ -36,26 +31,19 @@ export default function MemoriesScreen() {
     load();
   }, [load]);
 
-  const confirmDelete = useCallback(
-    (m: Memory) => {
-      Alert.alert("Delete memory?", m.content, [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deleteMemory(m.id);
-              setMemories((prev) => prev.filter((x) => x.id !== m.id));
-            } catch (err) {
-              Alert.alert("Failed", (err as Error).message);
-            }
-          },
+  const confirmDelete = useCallback((m: Memory) => {
+    Alert.alert("Delete memory?", m.content, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          await deleteMemory(m.id);
+          setMemories((prev) => prev.filter((x) => x.id !== m.id));
         },
-      ]);
-    },
-    [],
-  );
+      },
+    ]);
+  }, []);
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
@@ -70,7 +58,6 @@ export default function MemoriesScreen() {
         onSubmitEditing={load}
         returnKeyType="search"
       />
-      {error && <Text style={styles.error}>{error}</Text>}
       <FlatList
         data={memories}
         keyExtractor={(m) => String(m.id)}
@@ -133,10 +120,5 @@ const styles = StyleSheet.create({
     color: "#6b7280",
     marginTop: 40,
     paddingHorizontal: 24,
-  },
-  error: {
-    color: "#b91c1c",
-    textAlign: "center",
-    marginTop: 8,
   },
 });
