@@ -12,6 +12,9 @@ load_dotenv()
 
 class Settings:
     llm_api_key = os.getenv("LLM_API_KEY", "")
+    llm_provider = os.getenv("LLM_PROVIDER", "ollama")
+    ollama_model = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
+    ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
     edgar_user_agent = os.getenv("EDGAR_USER_AGENT", "")
     alpha_vantage_api_key = os.getenv("ALPHA_VANTAGE_API_KEY", "")
     fred_api_key = os.getenv("FRED_API_KEY", "")
