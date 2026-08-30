@@ -12,9 +12,11 @@ So the agent does two things a text-only search can't:
   2. Aggregates the attached tone metrics into a quantified read
      ("mostly neutral, elevated hedging"), not just a vibe
 
-It reports representative quotes WITH their tone and timestamp, so the
-final answer can say "the Chair sounded cautious (2.1 hedging markers
-per 100 words) — 'we remain data dependent' (at 14:22)".
+Scope note: the only transcript corpus in this system is FOMC (Federal
+Reserve) press conferences. A tone question about a specific company has
+no matching audio data, so the agent says so rather than substituting Fed
+commentary for company management — a correctness guard added after an
+end-to-end run surfaced exactly that confusion.
 """
 
 import os
@@ -32,6 +34,14 @@ from agents.state import AgentState, AgentType, Citation
 COLLECTION = "call_transcripts"
 TEXT_MODEL = "all-MiniLM-L6-v2"
 
+# Topic words indicating the sub-task is actually about the Fed / macro,
+# in which case the FOMC corpus is the correct source even if a ticker
+# was attached by the planner.
+FED_TERMS = (
+    "fed", "fomc", "powell", "warsh", "chair", "federal reserve",
+    "rate", "rates", "inflation", "monetary", "interest",
+)
+
 _encoder = None
 
 
@@ -43,12 +53,7 @@ def get_encoder():
 
 
 def _retrieve(description, role=None, limit=6):
-    """Semantic search over transcript segments, optionally by role.
-
-    role='chair' restricts to the Fed Chair / management, which is
-    usually what "how did management sound" actually means — press
-    questions are noise for a tone read.
-    """
+    """Semantic search over transcript segments, optionally by role."""
     client = QdrantClient(url=settings.qdrant_url)
     vector = get_encoder().encode(description).tolist()
 
@@ -82,7 +87,6 @@ def _aggregate_tone(segments):
     dominant = max(counts, key=counts.get) if counts else "unknown"
     avg_hedge = round(sum(hedges) / len(hedges), 2) if hedges else None
 
-    # Interpret hedging level qualitatively
     hedge_desc = ""
     if avg_hedge is not None:
         if avg_hedge >= 2.0:
@@ -137,10 +141,11 @@ def _format_excerpts(segments):
         who = s.get("speaker_normalized") or s.get("speaker") or "speaker"
         tone = s.get("sentiment", "?")
         ts = s.get("timestamp", "")
-        ts_str = f" @{ts}" if ts else ""
+        ts_str = " @" + ts if ts else ""
         event = s.get("event_id", "")
         preview = s.get("preview", "")[:220]
-        lines.append(f"[{i}] {who} ({tone}{ts_str}, {event}): {preview}")
+        lines.append("[" + str(i) + "] " + who + " (" + str(tone) + ts_str
+                     + ", " + str(event) + "): " + preview)
     return "\n\n".join(lines)
 
 
@@ -149,21 +154,37 @@ def run(state: AgentState):
     tasks = state.tasks_for(AgentType.SENTIMENT)
 
     for task in tasks:
-        # "management"/"chair"/"fed" tone questions -> restrict to chair role
         desc_l = task.description.lower()
+        is_fed_topic = any(term in desc_l for term in FED_TERMS)
+
+        # Company-specific tone question with no matching corpus:
+        # be honest about the data gap rather than substituting Fed data.
+        if task.ticker and not is_fed_topic:
+            state.add_evidence(
+                AgentType.SENTIMENT,
+                "No earnings-call transcript data is available for "
+                + task.ticker + " in this system; tone analysis is limited to "
+                "Federal Reserve / FOMC communications.",
+                Citation(source_type="transcript", ticker=task.ticker),
+                confidence="low",
+            )
+            task.done = True
+            continue
+
+        # Fed/macro tone question: restrict to the chair when the phrasing
+        # points at the decision-maker rather than the press pool.
         role = "chair" if any(w in desc_l for w in
-                              ("management", "chair", "fed", "powell", "warsh", "ceo", "cfo")) else None
+                              ("chair", "fed", "powell", "warsh", "management",
+                               "ceo", "cfo")) else None
 
         segments = _retrieve(task.description, role=role, limit=6)
-
         if not segments:
-            # Retry without the role filter before giving up
             segments = _retrieve(task.description, role=None, limit=6)
 
         if not segments:
             state.add_evidence(
                 AgentType.SENTIMENT,
-                f"No transcript segments found for: {task.description}",
+                "No transcript segments found for: " + task.description,
                 Citation(source_type="transcript"),
                 confidence="low",
             )
@@ -185,12 +206,12 @@ def run(state: AgentState):
         findings = llm.complete_json(prompt, system=SENTIMENT_SYSTEM, max_tokens=500)
 
         if not isinstance(findings, list) or not findings:
-            # Fall back to reporting the raw metrics even if the LLM stalls
             state.add_evidence(
                 AgentType.SENTIMENT,
-                f"Tone was predominantly {tone['dominant_sentiment']} with "
-                f"{tone['hedge_desc']} ({tone['avg_hedging']} markers/100 words) "
-                f"across {tone['n']} relevant segments.",
+                "Tone was predominantly " + tone["dominant_sentiment"]
+                + " with " + tone["hedge_desc"] + " ("
+                + str(tone["avg_hedging"]) + " markers/100 words) across "
+                + str(tone["n"]) + " relevant segments.",
                 Citation(source_type="transcript",
                          speaker=segments[0].get("speaker_normalized"),
                          period=segments[0].get("event_id"),
@@ -208,12 +229,12 @@ def run(state: AgentState):
             if isinstance(idx, int) and 1 <= idx <= len(segments):
                 src = segments[idx - 1]
 
+            base = src or segments[0]
             citation = Citation(
                 source_type="transcript",
-                speaker=(src or segments[0]).get("speaker_normalized")
-                        or (src or segments[0]).get("speaker"),
-                period=(src or segments[0]).get("event_id"),
-                timestamp=(src or segments[0]).get("timestamp"),
+                speaker=base.get("speaker_normalized") or base.get("speaker"),
+                period=base.get("event_id"),
+                timestamp=base.get("timestamp"),
             )
             state.add_evidence(
                 AgentType.SENTIMENT,
@@ -233,17 +254,18 @@ def main():
     state = AgentState(query="test")
     state.add_sub_task("How did the Fed Chair sound about inflation?",
                        AgentType.SENTIMENT)
-    state.add_sub_task("Assess the tone on interest rate decisions",
-                       AgentType.SENTIMENT)
+    state.add_sub_task("Assess the tone of Microsoft's management",
+                       AgentType.SENTIMENT, ticker="MSFT")
 
     print("Running sentiment agent on 2 sub-tasks...")
+    print("(one Fed question, one company question with no matching data)")
     print()
 
     run(state)
 
     for e in state.evidence_from(AgentType.SENTIMENT):
-        print(f"  [{e.confidence:6}] {e.content}")
-        print(f"           source: {e.citation.render()}")
+        print("  [" + e.confidence + "] " + e.content)
+        print("           source: " + e.citation.render())
         print()
 
 
