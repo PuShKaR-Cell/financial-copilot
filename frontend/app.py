@@ -33,8 +33,12 @@ EXAMPLES = [
 
 STAGE_LABELS = {
     "queued": "Queued...",
-    "planning": "Planning — breaking the question into sub-tasks",
-    "running": "Working — gathering evidence from filings, data, and transcripts",
+    "planning": "🧭 Planning — breaking the question into sub-tasks",
+    "retrieval: searching filings": "📄 Retrieval agent — searching SEC filings",
+    "numeric: computing figures": "🔢 Numeric agent — computing financial figures",
+    "sentiment: analyzing transcripts": "🎙️ Sentiment agent — analyzing Fed transcripts",
+    "synthesizing answer": "✍️ Synthesis agent — composing the answer",
+    "verifying claims": "🔍 Critic agent — verifying every claim against sources",
     "complete": "Complete",
     "failed": "Failed",
 }

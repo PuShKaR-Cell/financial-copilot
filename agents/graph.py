@@ -42,10 +42,47 @@ from agents import critic_agent
 # AgentState as the single value under the "state" key, so every node
 # operates on the rich object the agents already expect.
 
+def _report(data, stage):
+    """Call the progress callback if one was attached to the run."""
+    cb = data.get("on_stage")
+    if cb:
+        cb(stage)
+
+
 def _node_plan(data):
+    _report(data, "planning")
     state = data["state"]
     planner.plan(state)
-    return {"state": state}
+    return {"state": state, "on_stage": data.get("on_stage")}
+
+
+def _node_gather(data):
+    state = data["state"]
+    cb = data.get("on_stage")
+    if state.tasks_for(AgentType.RETRIEVAL):
+        _report(data, "retrieval: searching filings")
+        retrieval_agent.run(state)
+    if state.tasks_for(AgentType.NUMERIC):
+        _report(data, "numeric: computing figures")
+        numeric_agent.run(state)
+    if state.tasks_for(AgentType.SENTIMENT):
+        _report(data, "sentiment: analyzing transcripts")
+        sentiment_agent.run(state)
+    return {"state": state, "on_stage": cb}
+
+
+def _node_synthesize(data):
+    _report(data, "synthesizing answer")
+    state = data["state"]
+    synthesis_agent.run(state)
+    return {"state": state, "on_stage": data.get("on_stage")}
+
+
+def _node_verify(data):
+    _report(data, "verifying claims")
+    state = data["state"]
+    critic_agent.run(state)
+    return {"state": state, "on_stage": data.get("on_stage")}
 
 
 def _node_gather(data):
@@ -116,11 +153,13 @@ def get_graph():
     return _compiled
 
 
-def answer_question(question, verbose=True):
+def answer_question(question, verbose=True, on_stage=None):
     """Run one question through the full pipeline.
 
-    Returns the completed AgentState (final_answer, evidence, citations,
-    verification_status all populated).
+    on_stage: optional callback(stage_str) invoked as each node starts,
+    so callers (the API) can surface live progress.
+
+    Returns the completed AgentState.
     """
     state = AgentState(query=question)
 
@@ -129,7 +168,7 @@ def answer_question(question, verbose=True):
         print("-" * 60)
 
     start = time.time()
-    result = get_graph().invoke({"state": state})
+    result = get_graph().invoke({"state": state, "on_stage": on_stage})
     final_state = result["state"]
     elapsed = time.time() - start
 

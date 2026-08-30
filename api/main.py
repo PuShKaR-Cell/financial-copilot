@@ -77,8 +77,12 @@ def _run_job(job_id, question):
     """Background worker: run the graph and store the result."""
     _set_job(job_id, status="running", stage="planning",
              started_at=datetime.utcnow().isoformat())
+
+    def on_stage(stage):
+        _set_job(job_id, stage=stage)
+
     try:
-        state = graph.answer_question(question, verbose=False)
+        state = graph.answer_question(question, verbose=False, on_stage=on_stage)
 
         refs = citations.resolve_references(state)
         report = citations.verify_citations(state)
@@ -100,8 +104,6 @@ def _run_job(job_id, question):
         )
     except Exception as e:
         _set_job(job_id, status="error", stage="failed", error=str(e))
-
-
 @app.get("/health")
 def health():
     """Liveness plus a quick model reachability check."""
